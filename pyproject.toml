@@ -1,0 +1,9 @@
+[project]
+name = "moodle-csv-import"
+version = "0.1.0"
+description = "Aplicativo para pré-processamento de dados e geração de arquivo CSV no padrão do Moodle."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1.1",
+]
