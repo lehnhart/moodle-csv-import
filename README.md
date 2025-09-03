@@ -16,7 +16,7 @@ Este projeto fornece uma interface para realizar o pré-processamento de dados c
 
 1. Clone o repositório:
 ```bash
-git clone https://github.com/seu-usuario/moodle-csv-import.git
+git clone https://github.com/lehnhart/moodle-csv-import.git
 cd moodle-csv-import
 ```
 
