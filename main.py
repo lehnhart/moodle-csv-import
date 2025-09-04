@@ -186,8 +186,12 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
         column_order.append('email')
     
     # Processar cursos e grupos alternadamente
-    course_cols = sorted([k for k in columns_map.keys() if k.startswith('course')])
-    group_cols = sorted([k for k in columns_map.keys() if k.startswith('group')])
+    def sort_key(x):
+        # Extrai o número do final da string (course1 -> 1, course10 -> 10)
+        return int(''.join(filter(str.isdigit, x)))
+    
+    course_cols = sorted([k for k in columns_map.keys() if k.startswith('course')], key=sort_key)
+    group_cols = sorted([k for k in columns_map.keys() if k.startswith('group')], key=sort_key)
     
     # Adicionar curso padrão se necessário
     if not course_cols and default_course:
