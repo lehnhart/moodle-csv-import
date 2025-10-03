@@ -453,38 +453,60 @@ def home():
                                 invalid_emails=sorted(all_invalid_emails) if all_invalid_emails else None,
                                 duplicate_users=all_duplicate_users if all_duplicate_users else None)
         
+        # Função para limpar arquivos após o download
+        def cleanup_files(*files_to_clean):
+            """Remove os arquivos especificados e registra qualquer erro"""
+            for file in files_to_clean:
+                try:
+                    if os.path.exists(file):
+                        os.remove(file)
+                        app.logger.info(f"Arquivo removido com sucesso: {file}")
+                except (OSError, IOError) as e:
+                    app.logger.error(f"Erro ao remover arquivo {file}: {e}")
+
         # Se houver apenas um arquivo, retornar ele diretamente
         if len(output_files) == 1:
             response = send_file(output_files[0], as_attachment=True)
-            # Forçar limpeza imediata após o download
+            
             @response.call_on_close
             def cleanup():
-                try:
-                    os.remove(output_files[0])
-                except (OSError, IOError):
-                    pass
+                cleanup_files(output_files[0])
+                # Remove também o arquivo original
+                if os.path.exists(filepath):
+                    cleanup_files(filepath)
+            
             return response
         
         # Se houver múltiplos arquivos, criar um arquivo zip
         import zipfile
         zip_filename = os.path.join(app.config['UPLOAD_FOLDER'], 'arquivos_processados.zip')
-        with zipfile.ZipFile(zip_filename, 'w') as zipf:
-            for file in output_files:
-                zipf.write(file, os.path.basename(file))
         
-        response = send_file(zip_filename, as_attachment=True)
-        # Forçar limpeza imediata após o download
-        @response.call_on_close
-        def cleanup():
-            try:
-                # Remover arquivo ZIP
-                os.remove(zip_filename)
-                # Remover arquivos CSV individuais
+        try:
+            with zipfile.ZipFile(zip_filename, 'w') as zipf:
                 for file in output_files:
-                    os.remove(file)
-            except (OSError, IOError):
-                pass
-        return response
+                    if os.path.exists(file):
+                        zipf.write(file, os.path.basename(file))
+            
+            response = send_file(zip_filename, as_attachment=True)
+            
+            @response.call_on_close
+            def cleanup():
+                # Remove o arquivo ZIP
+                cleanup_files(zip_filename)
+                # Remove os arquivos CSV processados
+                for file in output_files:
+                    cleanup_files(file)
+                # Remove o arquivo original
+                if os.path.exists(filepath):
+                    cleanup_files(filepath)
+            
+            return response
+            
+        except Exception as e:
+            # Se houver erro na criação do ZIP, limpa os arquivos e propaga o erro
+            cleanup_files(zip_filename, *output_files, filepath)
+            app.logger.error(f"Erro ao criar arquivo ZIP: {e}")
+            raise
     
     return render_template(HTML_TEMPLATE, invalid_emails=None, duplicate_users=None)
 
