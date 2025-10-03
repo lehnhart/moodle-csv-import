@@ -186,8 +186,12 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
         column_order.append('email')
     
     # Processar cursos e grupos alternadamente
-    course_cols = sorted([k for k in columns_map.keys() if k.startswith('course')])
-    group_cols = sorted([k for k in columns_map.keys() if k.startswith('group')])
+    def sort_key(x):
+        # Extrai o número do final da string (course1 -> 1, course10 -> 10)
+        return int(''.join(filter(str.isdigit, x)))
+    
+    course_cols = sorted([k for k in columns_map.keys() if k.startswith('course')], key=sort_key)
+    group_cols = sorted([k for k in columns_map.keys() if k.startswith('group')], key=sort_key)
     
     # Adicionar curso padrão se necessário
     if not course_cols and default_course:
@@ -239,6 +243,10 @@ HTML_TEMPLATE = '''
         input[type="text"], input[type="password"] { padding: 5px; width: 300px; }
         button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; }
         button:hover { background-color: #45a049; }
+        .course-entry { margin-bottom: 10px; display: flex; gap: 10px; align-items: center; }
+        .course-entry input { width: 250px; }
+        .remove-course { padding: 5px 10px; background-color: #ff4444; margin-left: 5px; }
+        .remove-course:hover { background-color: #cc0000; }
         .error-message { color: red; margin-top: 20px; }
         .warning-message { color: #ff8c00; margin-top: 20px; }
         .password-group { margin-top: 10px; }
@@ -272,6 +280,36 @@ HTML_TEMPLATE = '''
             if (!checkbox.checked) {
                 passwordInput.value = '';
             }
+        }
+
+        function addCourseEntry() {
+            const container = document.getElementById('course-entries');
+            const entry = document.createElement('div');
+            entry.className = 'course-entry';
+            entry.innerHTML = `
+                <input type="text" name="courses[]" placeholder="Nome do curso">
+                <input type="text" name="groups[]" placeholder="Nome do grupo (opcional)">
+                <button type="button" class="remove-course" onclick="removeCourseEntry(this)">Remover</button>
+            `;
+            container.appendChild(entry);
+            updateRemoveButtons();
+        }
+
+        function removeCourseEntry(button) {
+            button.parentElement.remove();
+            updateRemoveButtons();
+        }
+
+        function updateRemoveButtons() {
+            const entries = document.querySelectorAll('.course-entry');
+            entries.forEach(entry => {
+                const removeButton = entry.querySelector('.remove-course');
+                if (entries.length === 1) {
+                    removeButton.style.display = 'none';
+                } else {
+                    removeButton.style.display = 'inline-block';
+                }
+            });
         }
     </script>
 </head>
@@ -316,9 +354,16 @@ HTML_TEMPLATE = '''
             <label for="file">Selecione o arquivo (xlsx, xls, csv, ods):</label>
             <input type="file" id="file" name="file" required>
         </div>
-        <div class="form-group">
-            <label for="default_course">Curso padrão (opcional):</label>
-            <input type="text" id="default_course" name="default_course">
+        <div class="form-group" id="courses-container">
+            <label>Cursos e Grupos:</label>
+            <div id="course-entries">
+                <div class="course-entry">
+                    <input type="text" name="courses[]" placeholder="Nome do curso">
+                    <input type="text" name="groups[]" placeholder="Nome do grupo (opcional)">
+                    <button type="button" class="remove-course" onclick="removeCourseEntry(this)" style="display:none;">Remover</button>
+                </div>
+            </div>
+            <button type="button" onclick="addCourseEntry()">Adicionar Curso</button>
         </div>
         <div class="form-group">
             <label class="checkbox-label">
@@ -358,9 +403,19 @@ def home():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
-        default_course = request.form.get('default_course')
+        # Obter cursos e grupos do formulário
+        courses = request.form.getlist('courses[]')
+        groups = request.form.getlist('groups[]')
         use_default_password = 'use_default_password' in request.form
         default_password = request.form.get('default_password') if use_default_password else None
+        
+        # Criar um dicionário de cursos e grupos manuais
+        manual_courses = {}
+        for i, (course, group) in enumerate(zip(courses, groups), 1):
+            if course.strip():  # Se o curso não estiver vazio
+                manual_courses[f'course{i}'] = course.strip()
+                if group.strip():  # Se o grupo não estiver vazio
+                    manual_courses[f'group{i}'] = group.strip()
         
         # Determinar o tipo de arquivo e ler apropriadamente
         if filename.endswith('.csv'):
@@ -377,7 +432,12 @@ def home():
         
         for i, df in enumerate(dfs):
             columns_map = identify_columns(df)
-            processed_df, invalid_emails, duplicate_users = process_dataframe(df, columns_map, default_course, default_password)
+            # Combinar colunas detectadas com cursos manuais
+            for k, v in manual_courses.items():
+                columns_map[k] = k  # Adiciona uma coluna temporária
+                df[k] = v  # Preenche a coluna com o valor manual
+            
+            processed_df, invalid_emails, duplicate_users = process_dataframe(df, columns_map, None, default_password)
             all_invalid_emails.update(invalid_emails)
             all_duplicate_users.update(duplicate_users)
             
@@ -428,5 +488,5 @@ def home():
     
     return render_template(HTML_TEMPLATE, invalid_emails=None, duplicate_users=None)
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=False)
