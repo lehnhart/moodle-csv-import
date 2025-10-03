@@ -377,6 +377,11 @@ HTML_TEMPLATE = '''
         </div>
         <button type="submit">Enviar</button>
     </form>
+    <div style="margin-top: 50px; text-align: left; font-size: 12px;">
+        <a href="https://github.com/lehnhart/moodle-csv-import/issues" target="_blank" style="color: #666; text-decoration: underline;">
+            Reportar erro ou fazer sugestão
+        </a>
+    </div>
 </body>
 </html>
 '''
