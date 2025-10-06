@@ -51,8 +51,19 @@ def identify_columns(df):
     
     # Procurar por colunas com CPF (username)
     for col in df.columns:
+        # Primeiro tenta pelo nome da coluna
+        if 'cpf' in str(col).lower():
+            columns_map['username'] = col
+            break
+            
+        # Se não encontrar pelo nome, procura pelo conteúdo
         sample = df[col].astype(str).iloc[0:10]
-        if any(re.search(r'\d{3}[.-]?\d{3}[.-]?\d{3}[-]?\d{2}', str(x)) for x in sample):
+        # Padrão para CPF com ou sem formatação
+        cpf_patterns = [
+            r'\d{3}[.-]?\d{3}[.-]?\d{3}[-]?\d{2}',  # Com pontuação opcional
+            r'^\d{11}$'  # 11 dígitos consecutivos
+        ]
+        if any(any(re.search(pattern, str(x).strip()) for pattern in cpf_patterns) for x in sample):
             columns_map['username'] = col
             break
     
