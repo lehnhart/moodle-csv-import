@@ -49,23 +49,31 @@ def identify_columns(df):
     """Identifica automaticamente as colunas do DataFrame"""
     columns_map = {}
     
-    # Procurar por colunas com CPF (username)
+    # Procurar por colunas com CPF (username) - primeiro por nome, depois por conteúdo
+    username_found = False
+    
+    # Primeiro tenta encontrar por nome da coluna
     for col in df.columns:
-        # Primeiro tenta pelo nome da coluna
         if 'cpf' in str(col).lower():
             columns_map['username'] = col
+            username_found = True
             break
-            
-        # Se não encontrar pelo nome, procura pelo conteúdo
-        sample = df[col].astype(str).iloc[0:10]
-        # Padrão para CPF com ou sem formatação
-        cpf_patterns = [
-            r'\d{3}[.-]?\d{3}[.-]?\d{3}[-]?\d{2}',  # Com pontuação opcional
-            r'^\d{11}$'  # 11 dígitos consecutivos
-        ]
-        if any(any(re.search(pattern, str(x).strip()) for pattern in cpf_patterns) for x in sample):
-            columns_map['username'] = col
-            break
+    
+    # Se não encontrou por nome, procura pelo padrão do conteúdo
+    if not username_found:
+        for col in df.columns:
+            # Evita verificar a mesma coluna que já foi mapeada
+            if col in columns_map.values():
+                continue
+                
+            sample = df[col].astype(str).iloc[0:10]
+            cpf_patterns = [
+                r'\d{3}[.-]?\d{3}[.-]?\d{3}[-]?\d{2}',
+                r'^\d{11}$'
+            ]
+            if any(any(re.search(pattern, str(x).strip()) for pattern in cpf_patterns) for x in sample):
+                columns_map['username'] = col
+                break
     
     # Procurar por colunas com email
     email_pattern = r'[a-zA-Z0-9][a-zA-Z0-9._%+-]*@[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}'
@@ -76,7 +84,11 @@ def identify_columns(df):
             break
     
     # Procurar por nome e sobrenome
-    name_cols = [col for col in df.columns if any(word in col.lower() for word in ['nome', 'name'])]
+    # Ignora a coluna já mapeada como username (CPF)
+    username_col = columns_map.get('username')
+    name_cols = [col for col in df.columns 
+                 if any(word in col.lower() for word in ['nome', 'name']) and col != username_col]
+
     if len(name_cols) >= 2:
         columns_map['firstname'] = name_cols[0]
         columns_map['lastname'] = name_cols[1]
@@ -119,53 +131,7 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
     duplicate_users = {}
     
     # Lista para manter a ordem das colunas
-    column_order = []
-    
-    # Processar username (CPF)
-    if 'username' in columns_map:
-        output_df['username'] = df[columns_map['username']].apply(sanitize_cpf)
-        column_order.append('username')
-        
-        # Identificar usernames duplicados
-        duplicates = df[df[columns_map['username']].duplicated(keep=False)]
-        if not duplicates.empty:
-            for idx in duplicates.index:
-                username = sanitize_cpf(df.at[idx, columns_map['username']])
-                if username not in duplicate_users:
-                    duplicate_users[username] = []
-                
-                record = {'username': username}
-                
-                # Adicionar outros campos disponíveis
-                if 'firstname' in columns_map:
-                    record['firstname'] = df.at[idx, columns_map['firstname']]
-                elif 'fullname' in columns_map:
-                    record['firstname'] = df.at[idx, columns_map['fullname']].split()[0]
-                
-                if 'lastname' in columns_map:
-                    record['lastname'] = df.at[idx, columns_map['lastname']]
-                elif 'fullname' in columns_map:
-                    record['lastname'] = ' '.join(df.at[idx, columns_map['fullname']].split()[1:])
-                
-                if 'email' in columns_map:
-                    record['email'] = df.at[idx, columns_map['email']]
-                
-                for i in range(1, 10):  # Verificar até course9
-                    course_key = f'course{i}'
-                    if course_key in columns_map:
-                        record[course_key] = df.at[idx, columns_map[course_key]]
-                    elif i == 1 and default_course:
-                        record[course_key] = default_course
-                
-                duplicate_users[username].append(record)
-    
-    # Processar senha (logo após username)
-    if 'password' in columns_map:
-        output_df['password'] = df[columns_map['password']]
-    elif default_password:
-        output_df['password'] = default_password
-    if 'password' in output_df:
-        column_order.append('password')
+    column_order = ['username', 'firstname', 'lastname', 'email']  # Ordem fixa inicial
     
     # Processar nome e sobrenome
     if 'fullname' in columns_map:
@@ -178,60 +144,51 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
             output_df['firstname'] = df[columns_map['firstname']]
         if 'lastname' in columns_map:
             output_df['lastname'] = df[columns_map['lastname']]
-    
-    if 'firstname' in output_df:
-        column_order.append('firstname')
-    if 'lastname' in output_df:
-        column_order.append('lastname')
+
+    # Processar username (CPF)
+    if 'username' in columns_map:
+        output_df['username'] = df[columns_map['username']].apply(sanitize_cpf)
+
     
     # Processar email
     if 'email' in columns_map:
-        # Limpar e processar emails
         output_df['email'] = df[columns_map['email']].astype(str).apply(lambda x: x.strip())
         # Validar emails
         invalid_emails.update(
             email for email in output_df['email']
             if not validate_email(email) and not pd.isna(email)
         )
-    if 'email' in output_df:
-        column_order.append('email')
     
     # Processar cursos e grupos alternadamente
     def sort_key(x):
-        # Extrai o número do final da string (course1 -> 1, course10 -> 10)
         return int(''.join(filter(str.isdigit, x)))
     
     course_cols = sorted([k for k in columns_map.keys() if k.startswith('course')], key=sort_key)
     group_cols = sorted([k for k in columns_map.keys() if k.startswith('group')], key=sort_key)
     
-    # Adicionar curso padrão se necessário
-    if not course_cols and default_course:
-        course_cols = ['course1']
-        output_df['course1'] = default_course
+    # Adicionar cursos e grupos à ordem das colunas
+    for i in range(max(len(course_cols), len(group_cols))):
+        if i < len(course_cols):
+            column_order.append(course_cols[i])
+        if i < len(group_cols):
+            column_order.append(group_cols[i])
     
-    # Combinar cursos e grupos
-    max_courses = len(course_cols)
-    for i in range(max_courses):
-        course_col = course_cols[i]
+    # Processar cursos
+    for course_col in course_cols:
         if course_col in columns_map:
             output_df[course_col] = df[columns_map[course_col]]
-        elif course_col == 'course1' and default_course:
-            output_df[course_col] = default_course
-        if course_col in output_df:
-            column_order.append(course_col)
-            
-        # Adicionar o grupo correspondente logo após o curso, se existir
-        group_col = f'group{i+1}'
+    
+    # Processar grupos
+    for group_col in group_cols:
         if group_col in columns_map:
             output_df[group_col] = df[columns_map[group_col]]
-            if group_col in output_df:
-                column_order.append(group_col)
     
-    # Remover duplicatas apenas por username
-    if 'username' in output_df.columns:
-        output_df = output_df.drop_duplicates(subset=['username'])
+    # Garantir que todas as colunas obrigatórias existam
+    for col in ['username', 'firstname', 'lastname', 'email']:
+        if col not in output_df.columns:
+            output_df[col] = ''
     
-    # Reordenar as colunas conforme foram adicionadas
+    # Reordenar as colunas na ordem correta
     output_df = output_df[column_order]
     
     return output_df, list(invalid_emails), duplicate_users
