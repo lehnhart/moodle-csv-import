@@ -131,7 +131,7 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
     duplicate_users = {}
     
     # Lista para manter a ordem das colunas
-    column_order = ['username', 'firstname', 'lastname', 'email']  # Ordem fixa inicial
+    column_order = ['username', 'firstname', 'lastname', 'email']
     
     # Processar nome e sobrenome
     if 'fullname' in columns_map:
@@ -149,7 +149,14 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
     if 'username' in columns_map:
         output_df['username'] = df[columns_map['username']].apply(sanitize_cpf)
 
-    
+    # Processar senha
+    if default_password:
+        output_df['password'] = default_password
+        column_order.insert(1, 'password')
+    elif 'password' in columns_map:
+        output_df['password'] = df[columns_map['password']]
+        column_order.insert(1, 'password')
+
     # Processar email
     if 'email' in columns_map:
         output_df['email'] = df[columns_map['email']].astype(str).apply(lambda x: x.strip())
@@ -166,12 +173,13 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
     course_cols = sorted([k for k in columns_map.keys() if k.startswith('course')], key=sort_key)
     group_cols = sorted([k for k in columns_map.keys() if k.startswith('group')], key=sort_key)
     
+    dynamic_cols = []
     # Adicionar cursos e grupos à ordem das colunas
     for i in range(max(len(course_cols), len(group_cols))):
         if i < len(course_cols):
-            column_order.append(course_cols[i])
+            dynamic_cols.append(course_cols[i])
         if i < len(group_cols):
-            column_order.append(group_cols[i])
+            dynamic_cols.append(group_cols[i])
     
     # Processar cursos
     for course_col in course_cols:
@@ -188,8 +196,11 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
         if col not in output_df.columns:
             output_df[col] = ''
     
+    # Adicionar colunas dinâmicas (cursos e grupos) à ordem
+    column_order.extend(dynamic_cols)
+
     # Reordenar as colunas na ordem correta
-    output_df = output_df[column_order]
+    output_df = output_df[[col for col in column_order if col in output_df.columns]]
     
     return output_df, list(invalid_emails), duplicate_users
 
