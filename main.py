@@ -153,9 +153,6 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
     if default_password:
         output_df['password'] = default_password
         column_order.insert(1, 'password')
-    elif 'password' in columns_map:
-        output_df['password'] = df[columns_map['password']]
-        column_order.insert(1, 'password')
 
     # Processar email
     if 'email' in columns_map:
