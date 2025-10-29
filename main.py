@@ -9,7 +9,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16MB default
 app.config['MAX_FILE_AGE'] = 3600  # Tempo máximo de vida dos arquivos em segundos (1 hora)
 
 # Criar pasta de uploads se não existir
@@ -152,9 +152,6 @@ def process_dataframe(df, columns_map, default_course=None, default_password=Non
     # Processar senha
     if default_password:
         output_df['password'] = default_password
-        column_order.insert(1, 'password')
-    elif 'password' in columns_map:
-        output_df['password'] = df[columns_map['password']]
         column_order.insert(1, 'password')
 
     # Processar email
