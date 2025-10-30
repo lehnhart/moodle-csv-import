@@ -14,7 +14,9 @@ RUN uv sync --locked
 COPY . .
 
 # Cria o diretório de uploads (sem volume; temporário dentro do container)
+# e cria diretório de cache para o uv, garantindo permissões antes de trocar de usuário
 RUN mkdir -p uploads && \
+    mkdir -p /app/.cache/uv && \
     chown -R nobody:nogroup /app && \
     chmod -R 755 /app
 
@@ -25,7 +27,8 @@ USER nobody
 EXPOSE 5000
 
 # Configura variáveis de ambiente
-ENV FLASK_APP=main.py \
+ENV XDG_CACHE_HOME=/app/.cache \
+    FLASK_APP=main.py \
     FLASK_ENV=production \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
