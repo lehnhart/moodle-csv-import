@@ -4,30 +4,31 @@ FROM ghcr.io/astral-sh/uv:0.8.15-python3.12-bookworm-slim
 # Define o diretório de trabalho
 WORKDIR /app
 
-# Copia os arquivos de configuração
+# Copia apenas os manifestos primeiro para aproveitar cache
 COPY pyproject.toml uv.lock ./
 
-# Instala as dependências do projeto
-RUN uv sync --locked && uv pip install gunicorn
+# Instala dependências do projeto usando uv
+RUN uv sync --locked
 
 # Copia o código da aplicação
 COPY . .
 
-# Cria e configura o diretório de uploads
+# Cria o diretório de uploads (sem volume; temporário dentro do container)
 RUN mkdir -p uploads && \
     chown -R nobody:nogroup /app && \
     chmod -R 755 /app
 
-# Muda para usuário não-root
+# Não rodar como root
 USER nobody
 
 # Expõe a porta da aplicação
 EXPOSE 5000
 
 # Configura variáveis de ambiente
-ENV FLASK_APP=main:app \
+ENV FLASK_APP=main.py \
+    FLASK_ENV=production \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Inicia a aplicação
-CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
+# Inicia a aplicação usando uv
+CMD ["uv", "run", "main.py", "--host", "0.0.0.0", "--port", "5000"]
